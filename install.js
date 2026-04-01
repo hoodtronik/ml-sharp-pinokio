@@ -4,7 +4,7 @@ module.exports = {
         {
             method: "shell.run",
             params: {
-                message: "git clone https://github.com/apple/ml-sharp app/ml-sharp"
+                message: "git clone https://github.com/hoodtronik/ml-sharp app/ml-sharp"
             }
         },
         // 2. Install (Windows + NVIDIA)
@@ -64,7 +64,7 @@ module.exports = {
                 ]
             }
         },
-        // 4. Notify
+        // 5. Notify
         {
             method: "notify",
             params: {

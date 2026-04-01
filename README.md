@@ -5,11 +5,11 @@
 
 A seamless Pinokio-ready Web UI for **Apple's ML-Sharp**, allowing you to generate 3D Gaussian Splatting (3DGS) models from a single image with high efficiency.
 
-
 ## 🚀 Features
 
 - **Single Click Install**: Fully automated dependency management via Pinokio.
 - **Efficient Generation**: Optimized 3D PLY and preview video generation.
+- **Standard PLY Export**: Produces externally-compatible 3DGS PLY files that work in SuperSplat, Luma, Antimatter15, and all standard viewers.
 - **Intuitive Web UI**: 
     - **New Job**: Upload an image and get your 3D assets immediately.
     - **Result History**: Manage, download, and review your previous generations.
@@ -29,8 +29,20 @@ A seamless Pinokio-ready Web UI for **Apple's ML-Sharp**, allowing you to genera
 1. **Upload**: Drag and drop an image into the "New Job" tab.
 2. **Configure**: Select "Generate Video Immediately" if you have an NVIDIA GPU.
 3. **Run**: Click "Start Generation".
-4. **Download**: Once finished, download the `.ply` model or videos from the file list.
+4. **Download**: Once finished, download the `_standard.ply` model or videos from the file list.
 5. **History**: Access the "Result History" tab to manage your collection.
+
+## 🔧 PLY Compatibility Fix
+
+This fork includes an automatic patch for ML-Sharp's PLY export format. Apple's original implementation writes a custom multi-element PLY (with extrinsic, intrinsic, image_size, and other metadata elements) that most external 3DGS viewers cannot parse. 
+
+**What this fix does:**
+
+- Automatically generates a `*_standard.ply` alongside the original for every export
+- The standard PLY contains only the `vertex` element with the 17 standard properties (xyz, normals, SH, opacity, scales, rotations)
+- The download link in the UI points to the standard PLY by default
+- The built-in 3D viewer continues to use the original format (converted for Gradio)
+- The patch is applied during installation and is idempotent (safe to re-run)
 
 ## 🖥 Requirements
 

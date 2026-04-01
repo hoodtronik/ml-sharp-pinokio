@@ -72,8 +72,12 @@ import numpy as np
 
 def convert_ply_for_gradio(input_path: str, output_path: str = None) -> str:
     """
-    Convert a 3DGS PLY file to Gradio-compatible format.
-    Gradio's Gsplat.js only supports float32 properties.
+    Convert a 3DGS PLY file to a standard format compatible with Gradio and external viewers.
+    
+    ML-Sharp saves PLY files with custom supplementary elements (extrinsic, intrinsic,
+    image_size, frame, disparity, color_space, version) that confuse standard viewers.
+    This function strips those elements and produces a single-element vertex PLY with
+    the 17 standard properties (xyz + normals + SH + opacity + scales + rotations).
     
     Args:
         input_path: Path to the original PLY file
@@ -106,23 +110,34 @@ def convert_ply_for_gradio(input_path: str, output_path: str = None) -> str:
         plydata = PlyData.read(input_path)
         vertex = plydata['vertex']
         
-        # Get all property names and convert to float32
-        props = vertex.data.dtype.names
         num_points = len(vertex.data)
+        source_props = vertex.data.dtype.names
         
-        # Create new dtype with all float32
-        new_dtype = [(name, 'f4') for name in props]
-        new_data = np.empty(num_points, dtype=new_dtype)
+        # Standard 3DGS property order (with normals)
+        standard_props = [
+            ("x", "f4"), ("y", "f4"), ("z", "f4"),
+            ("nx", "f4"), ("ny", "f4"), ("nz", "f4"),
+            ("f_dc_0", "f4"), ("f_dc_1", "f4"), ("f_dc_2", "f4"),
+            ("opacity", "f4"),
+            ("scale_0", "f4"), ("scale_1", "f4"), ("scale_2", "f4"),
+            ("rot_0", "f4"), ("rot_1", "f4"), ("rot_2", "f4"), ("rot_3", "f4"),
+        ]
         
-        # Copy and convert each property
-        for name in props:
-            new_data[name] = vertex.data[name].astype(np.float32)
+        new_data = np.empty(num_points, dtype=standard_props)
         
-        # Create new PLY and save
+        # Copy properties that exist in source
+        for name, _ in standard_props:
+            if name in source_props:
+                new_data[name] = vertex.data[name].astype(np.float32)
+            else:
+                # Normals default to 0
+                new_data[name] = 0.0
+        
+        # Write vertex-only PLY (no supplementary elements)
         new_element = PlyElement.describe(new_data, 'vertex')
         PlyData([new_element], text=False).write(output_path)
         
-        print(f"DEBUG: PLY converted successfully: {output_path}")
+        print(f"DEBUG: PLY converted successfully: {output_path} ({num_points} vertices, vertex-only)")
         return output_path
         
     except Exception as e:
@@ -646,12 +661,21 @@ def load_job_details_by_name(job_name):
                 break
     
     all_files = sorted(candidates)
+    # Filter out derivative PLY files from the user-facing download list:
+    # - _gradio variants are internal (for the built-in viewer)
+    # - original PLY (without _standard) uses ML-Sharp's custom format that breaks in external apps
+    # Only show _standard.ply which is universally compatible
+    has_standard = any("_standard" in os.path.basename(f).lower() and f.lower().endswith(".ply") for f in all_files)
+    all_files = [f for f in all_files if "_gradio" not in os.path.basename(f).lower()]
+    if has_standard:
+        all_files = [f for f in all_files if not (f.lower().endswith(".ply") and "_standard" not in os.path.basename(f).lower())]
     has_ply = any(f.endswith(".ply") for f in all_files)
     
-    # Find PLY file for 3D viewer
+    # Find original PLY file for 3D viewer (not _gradio or _standard variants)
+    # Search in raw candidates since the original is filtered from all_files for downloads
     ply_file = None
-    for f in all_files:
-        if f.lower().endswith(".ply") and "_gradio" not in f.lower():
+    for f in sorted(candidates):
+        if f.lower().endswith(".ply") and "_gradio" not in f.lower() and "_standard" not in f.lower():
             ply_file = f
             break
     
@@ -994,12 +1018,16 @@ with gr.Blocks(title="WebUI for ML-Sharp (3DGS)", delete_cache=(86400, 86400)) a
              files_found = []
              if job_dir and os.path.exists(job_dir):
                   raw_files = glob.glob(os.path.join(job_dir, "*.*"))
+                  has_standard = any("_standard" in os.path.basename(f).lower() and f.lower().endswith(".ply") for f in raw_files)
                   for f in raw_files:
                       # Skip converted files for file list
                       if "_gradio" in f.lower():
                           continue
-                      if f.lower().endswith('.ply'):
+                      if f.lower().endswith('.ply') and "_standard" not in f.lower():
                           ply_file = f
+                      # For downloads: skip original PLY if standard exists
+                      if f.lower().endswith('.ply') and has_standard and "_standard" not in f.lower():
+                          continue
                       if f.lower().endswith(('.ply', '.mp4')):
                           files_found.append(f)
              
